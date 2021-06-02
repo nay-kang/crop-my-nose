@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang='en'>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Crop My Nose</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css" rel="stylesheet" 
+            integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.bundle.min.js" 
+            integrity="sha384-gtEjrD/SeCtmISkJkNUaaKMoLD0//ElJ19smozuHV6z3Iehds+3Ulb9Bn9Plx0x4" crossorigin="anonymous"></script>
+
+        <script src="face-api.js"></script>
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js" 
+            integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" 
+            crossorigin="anonymous">
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.11/cropper.min.js" 
+            integrity="sha512-FHa4dxvEkSR0LOFH/iFH0iSqlYHf/iTwLc5Ws/1Su1W90X0qnxFxciJimoue/zyOA/+Qz/XQmmKqjbubAAzpkA==" 
+            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.11/cropper.min.css" 
+            integrity="sha512-NCJ1O5tCMq4DK670CblvRiob3bb5PAxJ7MALAz2cV40T9RgNMrJSAwJKy0oz20Wu7TDn9Z2WnveirOeHmpaIlA==" 
+            crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+        <link href="https://releases.transloadit.com/uppy/v1.29.1/uppy.min.css" rel="stylesheet">
+        <script src="https://releases.transloadit.com/uppy/v1.29.1/uppy.min.js"></script>
+        <script src="https://releases.transloadit.com/uppy/locales/v1.20.1/zh_CN.min.js"></script>
+
+        <style>
+            /* img {
+                display: block;
+                max-width: 100%;
+            } */
+            .card {
+                width: 400px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="container">
+            <div class="row">
+                
+                <div class="col">
+                    <div id='drop-zone'></div>
+                    
+                    <!-- <input id="select-image" type="file" onchange="changeImage()" accept=".jpg,.jpeg,.png,.webp"> -->
+                </div>
+                <div class="col">
+                    <div class='row'>
+                        <div class='col'>
+                            <div class="input-group mb-3">
+                                <input type="text" class="form-control" placeholder="宽" aria-label="宽" id='width' value='3'>
+                                <span class="input-group-text">X</span>
+                                <input type="text" class="form-control" placeholder="高" aria-label="高" id='height' value='4'>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <button onclick="download()" class="btn btn-primary">下载裁切后的图片</button>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+            <div class="row" id='image-container'>
+                
+            </div>
+        </div>
+       
+        
+    </body>
+    <script>
+        // support drag files
+        const uppy = new Uppy.Core({
+            autoProceed:true,
+        })
+        uppy.setOptions({
+            onBeforeFileAdded:(file,files)=>{
+                console.log(file,files)
+                createImageElement(file)
+                //不需要上传文件，只是用来获取文件
+                uppy.cancelAll()
+                return false;
+            }
+        })
+        uppy.use(
+            Uppy.Dashboard,{
+                inline:true,
+                target:"#drop-zone",
+                height:200,
+                locale: Uppy.locales.zh_CN,
+            }
+        )
+
+        const croppers = []
+        
+
+        function createImageElement(file){
+            const col = document.createElement('div')
+            col.setAttribute('class','col')
+            const card = document.createElement("div")
+            card.setAttribute("class","card")
+            col.appendChild(card)
+            const imgElement = document.createElement("img")
+            imgElement.setAttribute("class","card-img-top")
+            card.appendChild(imgElement)
+            faceapi.bufferToImage(file.data).then((img)=>{
+                imgElement.src = img.src
+                document.getElementById('image-container').appendChild(col)
+                detect(imgElement)
+            })
+            
+        }
+
+        // download cropped image
+        function download(){
+            for(const cropper of croppers){
+                console.log(cropper)
+                var link = document.createElement('a')
+                link.download = 'crop_img.jpg'
+                link.href = cropper.getCroppedCanvas().toDataURL('image/jpeg',1)
+                link.click()
+                link.delete
+                cropper.destroy()
+            }
+            while(croppers.length>0){
+                croppers.pop()
+            }
+            const node = document.getElementById('image-container')
+            node.querySelectorAll('*').forEach(n=>n.remove())
+        }
+        
+        async function detect(image){
+            
+            const result = await faceapi.detectSingleFace(image).withFaceLandmarks()
+            console.log(result)
+            if(!result){
+                console.log(result,"not detect face")
+            }
+            const nose = result.landmarks.getNose()
+            var highestPoint = null
+            for(const point of nose){
+                if(highestPoint==null){
+                    highestPoint=point
+                }else if(highestPoint.y<point.y){
+                    highestPoint=point
+                }
+            }
+            const aspect_width = document.getElementById('width').value
+            const aspect_height = document.getElementById('height').value
+            const cropper = new Cropper(image,{
+                viewMode:1,
+                aspectRatio:aspect_width/aspect_height,
+                // autoCrop:false,
+                ready(){
+                    // image.addEventListener('crop',(event)=>{
+                    //     console.log(event.detail)
+                    //     console.log(image.naturalHeight,image.naturalWidth,image.height,image.width)
+                    // })
+                    const imageData = this.cropper.getImageData()
+                    
+                    // console.log(imageData)
+                    // const top = imageData.height/imageData.naturalHeight*highestPoint.y
+                    // const top = imageData.naturalHeight/2
+                    console.log(highestPoint.y,top,imageData.height-top)
+                    crop_height = imageData.naturalHeight-highestPoint.y
+                    crop_width = crop_height*aspect_width/aspect_height
+                    left = (imageData.naturalWidth-crop_width)/2
+                    this.cropper.setData({
+                        x:left,
+                        y:highestPoint.y,
+                        // top:0,
+                        width:crop_width,
+                        height:crop_height
+                    })
+                    
+                }
+            });
+            croppers.push(cropper)
+        }
+
+        //load files
+        async function run(){
+            await faceapi.nets.ssdMobilenetv1.loadFromUri('/models/')
+            await faceapi.loadFaceLandmarkModel('/models/')
+        }
+        $(document).ready(function(){
+            run()
+        })
+    </script>
+</html>
