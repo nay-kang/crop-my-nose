@@ -133,19 +133,20 @@
         async function detect(image){
             
             const result = await faceapi.detectSingleFace(image).withFaceLandmarks()
+            let topPoint = 0
             console.log(result)
             if(!result){
                 console.log(result,"not detect face")
             }
-            const nose = result.landmarks.getNose()
-            var highestPoint = null
-            for(const point of nose){
-                if(highestPoint==null){
-                    highestPoint=point
-                }else if(highestPoint.y<point.y){
-                    highestPoint=point
+            if(result && "landmarks" in result){
+                const nose = result.landmarks.getNose()
+                for(const point of nose){
+                    if(topPoint<point.y){
+                        topPoint=point.y
+                    }
                 }
             }
+            
             const aspect_width = document.getElementById('width').value
             const aspect_height = document.getElementById('height').value
             const cropper = new Cropper(image,{
@@ -162,13 +163,13 @@
                     // console.log(imageData)
                     // const top = imageData.height/imageData.naturalHeight*highestPoint.y
                     // const top = imageData.naturalHeight/2
-                    console.log(highestPoint.y,top,imageData.height-top)
-                    crop_height = imageData.naturalHeight-highestPoint.y
+                    console.log(topPoint,top,imageData.height-top)
+                    crop_height = imageData.naturalHeight-topPoint
                     crop_width = crop_height*aspect_width/aspect_height
                     left = (imageData.naturalWidth-crop_width)/2
                     this.cropper.setData({
                         x:left,
-                        y:highestPoint.y,
+                        y:topPoint,
                         // top:0,
                         width:crop_width,
                         height:crop_height
